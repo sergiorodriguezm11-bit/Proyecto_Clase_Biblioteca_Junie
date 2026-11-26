@@ -1,0 +1,64 @@
+services:
+  db:
+    image: mysql:8.0.41-debian
+    container_name: biblioteca-db
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD es obligatorio}
+      MYSQL_DATABASE: ${DB_NAME:?DB_NAME es obligatorio}
+      MYSQL_USER: ${DB_USER:?DB_USER es obligatorio}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD es obligatorio}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${DB_USER:?DB_USER es obligatorio}", "-p${DB_PASSWORD:?DB_PASSWORD es obligatorio}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - biblioteca-network
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: biblioteca-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:?DB_NAME es obligatorio}
+      DB_USER: ${DB_USER:?DB_USER es obligatorio}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD es obligatorio}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      DB_POOL_MIN: ${DB_POOL_MIN:-2}
+      DB_POOL_IDLE: ${DB_POOL_IDLE:-5}
+    ports:
+      - "8080:8080"
+    networks:
+      - biblioteca-network
+    restart: unless-stopped
+
+  adminer:
+    image: adminer
+    container_name: biblioteca-adminer
+    depends_on:
+      - db
+    ports:
+      - "8081:8080"
+    networks:
+      - biblioteca-network
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  biblioteca-network:
+    driver: bridge

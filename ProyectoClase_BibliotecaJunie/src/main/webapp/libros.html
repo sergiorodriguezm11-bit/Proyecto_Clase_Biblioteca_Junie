@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Libros - Biblioteca</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>📚 Biblioteca</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">Inicio</a></li>
+                <li><a href="libros.html" class="active">Libros</a></li>
+                <li><a href="autores.html">Autores</a></li>
+                <li><a href="categorias.html">Categorías</a></li>
+                <li><a href="socios.html">Socios</a></li>
+                <li><a href="prestamos.html">Préstamos</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <h2>Libros</h2>
+        <div id="message"></div>
+        <div class="toolbar">
+            <button class="btn" onclick="showForm()">+ Nuevo Libro</button>
+        </div>
+        <div class="filters">
+            <input type="text" id="filterTitulo" placeholder="Filtrar por título..." oninput="filterList()">
+            <input type="text" id="filterAutor" placeholder="Filtrar por autor..." oninput="filterList()">
+            <input type="text" id="filterCategoria" placeholder="Filtrar por categoría..." oninput="filterList()">
+        </div>
+        <div id="loading" class="loading">Cargando...</div>
+        <table id="table" style="display:none">
+            <thead><tr><th>ID</th><th>Título</th><th>ISBN</th><th>Año</th><th>Stock</th><th>Autor</th><th>Categorías</th><th>Acciones</th></tr></thead>
+            <tbody id="tbody"></tbody>
+        </table>
+    </main>
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle">Nuevo Libro</h2>
+            <form id="form" onsubmit="save(event)">
+                <input type="hidden" id="id">
+                <div class="form-group"><label for="titulo">Título</label><input type="text" id="titulo" required></div>
+                <div class="form-group"><label for="isbn">ISBN</label><input type="text" id="isbn" required></div>
+                <div class="form-group"><label for="anioPublicacion">Año</label><input type="number" id="anioPublicacion" min="1450" max="2099" required></div>
+                <div class="form-group"><label for="stock">Stock</label><input type="number" id="stock" min="0" required></div>
+                <div class="form-group"><label for="autorId">Autor</label><select id="autorId" required></select></div>
+                <div class="form-group"><label for="categoriaIds">Categorías</label><select id="categoriaIds" multiple></select></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <footer><p>Sistema de Gestión de Biblioteca</p></footer>
+    <script type="module">
+        import { bindTableActions, escapeHtml, get, post, put, del } from './js/api.js';
+        let allLibros = [];
+        let autores = [];
+        let categorias = [];
+
+        window.renderList = async function() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('table').style.display = 'none';
+            try {
+                allLibros = await get('/api/libros');
+                autores = await get('/api/autores');
+                categorias = await get('/api/categorias');
+                populateSelects();
+                renderTable(allLibros);
+            } catch (e) { showMessage(e.message, 'error'); }
+            finally { document.getElementById('loading').style.display = 'none'; }
+        };
+
+        function renderTable(data) {
+            const tbody = document.getElementById('tbody');
+            tbody.innerHTML = '';
+            data.forEach(l => {
+                const autor = l.autor ? l.autor.nombre : '-';
+                const cats = l.categorias ? l.categorias.map(c => c.nombre).join(', ') : '-';
+                tbody.innerHTML += `<tr>
+                    <td>${escapeHtml(l.id)}</td><td>${escapeHtml(l.titulo)}</td><td>${escapeHtml(l.isbn)}</td>
+                    <td>${escapeHtml(l.anioPublicacion)}</td><td>${escapeHtml(l.stock)}</td><td>${escapeHtml(autor)}</td><td>${escapeHtml(cats)}</td>
+                    <td><button class="btn" data-action="edit" data-id="${escapeHtml(l.id)}">Editar</button>
+                    <button class="btn btn-danger" data-action="remove" data-id="${escapeHtml(l.id)}">Borrar</button></td></tr>`;
+            });
+            document.getElementById('table').style.display = 'table';
+        }
+
+        function populateSelects() {
+            const selAutor = document.getElementById('autorId');
+            selAutor.innerHTML = autores.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.nombre)}</option>`).join('');
+            const selCat = document.getElementById('categoriaIds');
+            selCat.innerHTML = categorias.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.nombre)}</option>`).join('');
+        }
+
+        window.filterList = function() {
+            const titulo = document.getElementById('filterTitulo').value.toLowerCase();
+            const autor = document.getElementById('filterAutor').value.toLowerCase();
+            const categoria = document.getElementById('filterCategoria').value.toLowerCase();
+            let filtered = allLibros;
+            if (titulo) filtered = filtered.filter(l => l.titulo.toLowerCase().includes(titulo));
+            if (autor) filtered = filtered.filter(l => l.autor && l.autor.nombre.toLowerCase().includes(autor));
+            if (categoria) filtered = filtered.filter(l => l.categorias && l.categorias.some(c => c.nombre.toLowerCase().includes(categoria)));
+            renderTable(filtered);
+        };
+
+        window.showForm = function() {
+            document.getElementById('modalTitle').textContent = 'Nuevo Libro';
+            document.getElementById('form').reset();
+            document.getElementById('id').value = '';
+            document.getElementById('modal').classList.add('active');
+        };
+
+        window.edit = async function(id) {
+            try {
+                const l = await get(`/api/libros/${id}`);
+                document.getElementById('modalTitle').textContent = 'Editar Libro';
+                document.getElementById('id').value = l.id;
+                document.getElementById('titulo').value = l.titulo;
+                document.getElementById('isbn').value = l.isbn;
+                document.getElementById('anioPublicacion').value = l.anioPublicacion;
+                document.getElementById('stock').value = l.stock;
+                document.getElementById('autorId').value = l.autor ? l.autor.id : '';
+                const selCat = document.getElementById('categoriaIds');
+                Array.from(selCat.options).forEach(opt => {
+                    opt.selected = l.categorias && l.categorias.some(c => c.id === parseInt(opt.value));
+                });
+                document.getElementById('modal').classList.add('active');
+            } catch (e) { showMessage(e.message, 'error'); }
+        };
+
+        window.save = async function(e) {
+            e.preventDefault();
+            const id = document.getElementById('id').value;
+            const catIds = Array.from(document.getElementById('categoriaIds').selectedOptions).map(o => parseInt(o.value));
+            const body = {
+                titulo: document.getElementById('titulo').value,
+                isbn: document.getElementById('isbn').value,
+                anioPublicacion: parseInt(document.getElementById('anioPublicacion').value),
+                stock: parseInt(document.getElementById('stock').value),
+                autorId: parseInt(document.getElementById('autorId').value),
+                categoriaIds: catIds
+            };
+            try {
+                if (id) await put(`/api/libros/${id}`, body);
+                else await post('/api/libros', body);
+                closeModal();
+                showMessage(id ? 'Libro actualizado' : 'Libro creado', 'success');
+                window.renderList();
+            } catch (err) { showMessage(err.message, 'error'); }
+        };
+
+        window.remove = async function(id) {
+            if (!confirm('¿Está seguro de borrar este libro?')) return;
+            try { await del(`/api/libros/${id}`); showMessage('Libro eliminado', 'success'); window.renderList(); }
+            catch (e) { showMessage(e.message, 'error'); }
+        };
+
+        window.closeModal = function() { document.getElementById('modal').classList.remove('active'); };
+        window.showMessage = function(msg, type) {
+            const el = document.getElementById('message');
+            el.innerHTML = `<div class="message ${escapeHtml(type)}">${escapeHtml(msg)}</div>`;
+            setTimeout(() => el.innerHTML = '', 3000);
+        };
+        bindTableActions(document.getElementById('tbody'), {
+            edit: id => window.edit(id),
+            remove: id => window.remove(id)
+        });
+        window.renderList();
+    </script>
+</body>
+</html>

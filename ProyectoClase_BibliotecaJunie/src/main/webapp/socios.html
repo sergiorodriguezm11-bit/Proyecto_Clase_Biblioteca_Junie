@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Socios - Biblioteca</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>📚 Biblioteca</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">Inicio</a></li>
+                <li><a href="libros.html">Libros</a></li>
+                <li><a href="autores.html">Autores</a></li>
+                <li><a href="categorias.html">Categorías</a></li>
+                <li><a href="socios.html" class="active">Socios</a></li>
+                <li><a href="prestamos.html">Préstamos</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <h2>Socios</h2>
+        <div id="message"></div>
+        <div class="toolbar"><button class="btn" onclick="showForm()">+ Nuevo Socio</button></div>
+        <div id="loading" class="loading">Cargando...</div>
+        <table id="table" style="display:none">
+            <thead><tr><th>ID</th><th>Nombre</th><th>Email</th><th>Fecha Alta</th><th>Acciones</th></tr></thead>
+            <tbody id="tbody"></tbody>
+        </table>
+    </main>
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle">Nuevo Socio</h2>
+            <form id="form" onsubmit="save(event)">
+                <input type="hidden" id="id">
+                <div class="form-group"><label for="nombre">Nombre</label><input type="text" id="nombre" required></div>
+                <div class="form-group"><label for="email">Email</label><input type="email" id="email" required></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <footer><p>Sistema de Gestión de Biblioteca</p></footer>
+    <script type="module">
+        import { bindTableActions, escapeHtml, get, post, put, del } from './js/api.js';
+        window.renderList = async function() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('table').style.display = 'none';
+            try {
+                const data = await get('/api/socios');
+                const tbody = document.getElementById('tbody');
+                tbody.innerHTML = '';
+                data.forEach(s => {
+                    tbody.innerHTML += `<tr><td>${escapeHtml(s.id)}</td><td>${escapeHtml(s.nombre)}</td><td>${escapeHtml(s.email)}</td>
+                        <td>${escapeHtml(s.fechaAlta)}</td>
+                        <td><button class="btn" data-action="edit" data-id="${escapeHtml(s.id)}">Editar</button>
+                        <button class="btn btn-danger" data-action="remove" data-id="${escapeHtml(s.id)}">Borrar</button></td></tr>`;
+                });
+                document.getElementById('table').style.display = 'table';
+            } catch (e) { showMessage(e.message, 'error'); }
+            finally { document.getElementById('loading').style.display = 'none'; }
+        };
+        window.showForm = function() {
+            document.getElementById('modalTitle').textContent = 'Nuevo Socio';
+            document.getElementById('form').reset();
+            document.getElementById('id').value = '';
+            document.getElementById('modal').classList.add('active');
+        };
+        window.edit = async function(id) {
+            try {
+                const s = await get(`/api/socios/${id}`);
+                document.getElementById('modalTitle').textContent = 'Editar Socio';
+                document.getElementById('id').value = s.id;
+                document.getElementById('nombre').value = s.nombre;
+                document.getElementById('email').value = s.email;
+                document.getElementById('modal').classList.add('active');
+            } catch (e) { showMessage(e.message, 'error'); }
+        };
+        window.save = async function(e) {
+            e.preventDefault();
+            const id = document.getElementById('id').value;
+            const body = { nombre: document.getElementById('nombre').value, email: document.getElementById('email').value };
+            try {
+                if (id) await put(`/api/socios/${id}`, body);
+                else await post('/api/socios', body);
+                closeModal();
+                showMessage(id ? 'Socio actualizado' : 'Socio creado', 'success');
+                window.renderList();
+            } catch (err) { showMessage(err.message, 'error'); }
+        };
+        window.remove = async function(id) {
+            if (!confirm('¿Está seguro de borrar este socio?')) return;
+            try { await del(`/api/socios/${id}`); showMessage('Socio eliminado', 'success'); window.renderList(); }
+            catch (e) { showMessage(e.message, 'error'); }
+        };
+        window.closeModal = function() { document.getElementById('modal').classList.remove('active'); };
+        window.showMessage = function(msg, type) {
+            const el = document.getElementById('message');
+            el.innerHTML = `<div class="message ${escapeHtml(type)}">${escapeHtml(msg)}</div>`;
+            setTimeout(() => el.innerHTML = '', 3000);
+        };
+        bindTableActions(document.getElementById('tbody'), {
+            edit: id => window.edit(id),
+            remove: id => window.remove(id)
+        });
+        window.renderList();
+    </script>
+</body>
+</html>

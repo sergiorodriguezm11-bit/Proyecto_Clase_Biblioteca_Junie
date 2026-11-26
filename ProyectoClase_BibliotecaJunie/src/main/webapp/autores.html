@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autores - Biblioteca</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>📚 Biblioteca</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">Inicio</a></li>
+                <li><a href="libros.html">Libros</a></li>
+                <li><a href="autores.html" class="active">Autores</a></li>
+                <li><a href="categorias.html">Categorías</a></li>
+                <li><a href="socios.html">Socios</a></li>
+                <li><a href="prestamos.html">Préstamos</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <h2>Autores</h2>
+        <div id="message"></div>
+        <div class="toolbar">
+            <button class="btn" onclick="showForm()">+ Nuevo Autor</button>
+        </div>
+        <div id="loading" class="loading">Cargando...</div>
+        <table id="table" style="display:none">
+            <thead>
+                <tr><th>ID</th><th>Nombre</th><th>Nacionalidad</th><th>Acciones</th></tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+        </table>
+    </main>
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h2 id="modalTitle">Nuevo Autor</h2>
+            <form id="form" onsubmit="save(event)">
+                <input type="hidden" id="id">
+                <div class="form-group">
+                    <label for="nombre">Nombre</label>
+                    <input type="text" id="nombre" required>
+                </div>
+                <div class="form-group">
+                    <label for="nacionalidad">Nacionalidad</label>
+                    <input type="text" id="nacionalidad" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <footer><p>Sistema de Gestión de Biblioteca</p></footer>
+    <script type="module">
+        import { bindTableActions, escapeHtml, get, post, put, del } from './js/api.js';
+
+        window.renderList = async function() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('table').style.display = 'none';
+            try {
+                const data = await get('/api/autores');
+                const tbody = document.getElementById('tbody');
+                tbody.innerHTML = '';
+                data.forEach(a => {
+                    tbody.innerHTML += `<tr>
+                        <td>${escapeHtml(a.id)}</td>
+                        <td>${escapeHtml(a.nombre)}</td>
+                        <td>${escapeHtml(a.nacionalidad)}</td>
+                        <td>
+                            <button class="btn" data-action="edit" data-id="${escapeHtml(a.id)}">Editar</button>
+                            <button class="btn btn-danger" data-action="remove" data-id="${escapeHtml(a.id)}">Borrar</button>
+                        </td>
+                    </tr>`;
+                });
+                document.getElementById('table').style.display = 'table';
+            } catch (e) {
+                showMessage(e.message, 'error');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        };
+
+        window.showForm = function() {
+            document.getElementById('modalTitle').textContent = 'Nuevo Autor';
+            document.getElementById('form').reset();
+            document.getElementById('id').value = '';
+            document.getElementById('modal').classList.add('active');
+        };
+
+        window.edit = async function(id) {
+            try {
+                const a = await get(`/api/autores/${id}`);
+                document.getElementById('modalTitle').textContent = 'Editar Autor';
+                document.getElementById('id').value = a.id;
+                document.getElementById('nombre').value = a.nombre;
+                document.getElementById('nacionalidad').value = a.nacionalidad;
+                document.getElementById('modal').classList.add('active');
+            } catch (e) {
+                showMessage(e.message, 'error');
+            }
+        };
+
+        window.save = async function(e) {
+            e.preventDefault();
+            const id = document.getElementById('id').value;
+            const body = {
+                nombre: document.getElementById('nombre').value,
+                nacionalidad: document.getElementById('nacionalidad').value
+            };
+            try {
+                if (id) await put(`/api/autores/${id}`, body);
+                else await post('/api/autores', body);
+                closeModal();
+                showMessage(id ? 'Autor actualizado' : 'Autor creado', 'success');
+                window.renderList();
+            } catch (err) {
+                showMessage(err.message, 'error');
+            }
+        };
+
+        window.remove = async function(id) {
+            if (!confirm('¿Está seguro de borrar este autor?')) return;
+            try {
+                await del(`/api/autores/${id}`);
+                showMessage('Autor eliminado', 'success');
+                window.renderList();
+            } catch (e) {
+                showMessage(e.message, 'error');
+            }
+        };
+
+        window.closeModal = function() {
+            document.getElementById('modal').classList.remove('active');
+        };
+
+        window.showMessage = function(msg, type) {
+            const el = document.getElementById('message');
+            el.innerHTML = `<div class="message ${escapeHtml(type)}">${escapeHtml(msg)}</div>`;
+            setTimeout(() => el.innerHTML = '', 3000);
+        };
+
+        bindTableActions(document.getElementById('tbody'), {
+            edit: id => window.edit(id),
+            remove: id => window.remove(id)
+        });
+        window.renderList();
+    </script>
+</body>
+</html>

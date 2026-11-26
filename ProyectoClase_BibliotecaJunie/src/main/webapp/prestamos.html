@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Préstamos - Biblioteca</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>📚 Biblioteca</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">Inicio</a></li>
+                <li><a href="libros.html">Libros</a></li>
+                <li><a href="autores.html">Autores</a></li>
+                <li><a href="categorias.html">Categorías</a></li>
+                <li><a href="socios.html">Socios</a></li>
+                <li><a href="prestamos.html" class="active">Préstamos</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main>
+        <h2>Préstamos</h2>
+        <div id="message"></div>
+        <div class="toolbar"><button class="btn" onclick="showForm()">+ Nuevo Préstamo</button></div>
+        <div class="filters">
+            <select id="filterEstado" onchange="filterList()">
+                <option value="">Todos los estados</option>
+                <option value="prestado">Prestados</option>
+                <option value="devuelto">Devueltos</option>
+            </select>
+        </div>
+        <div id="loading" class="loading">Cargando...</div>
+        <table id="table" style="display:none">
+            <thead><tr><th>ID</th><th>Socio</th><th>Libro</th><th>Fecha Préstamo</th><th>Fecha Devolución</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="tbody"></tbody>
+        </table>
+    </main>
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h2>Nuevo Préstamo</h2>
+            <form id="form" onsubmit="save(event)">
+                <div class="form-group"><label for="socioId">Socio</label><select id="socioId" required></select></div>
+                <div class="form-group"><label for="libroId">Libro</label><select id="libroId" required></select></div>
+                <div class="modal-actions">
+                    <button type="button" class="btn" onclick="closeModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Crear Préstamo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <footer><p>Sistema de Gestión de Biblioteca</p></footer>
+    <script type="module">
+        import { bindTableActions, escapeHtml, get, post, put, del } from './js/api.js';
+        let allPrestamos = [];
+        let socios = [];
+        let libros = [];
+
+        window.renderList = async function() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('table').style.display = 'none';
+            try {
+                allPrestamos = await get('/api/prestamos');
+                socios = await get('/api/socios');
+                libros = await get('/api/libros');
+                populateSelects();
+                renderTable(allPrestamos);
+            } catch (e) { showMessage(e.message, 'error'); }
+            finally { document.getElementById('loading').style.display = 'none'; }
+        };
+
+        function renderTable(data) {
+            const tbody = document.getElementById('tbody');
+            tbody.innerHTML = '';
+            data.forEach(p => {
+                const socio = p.socio ? p.socio.nombre : '-';
+                const libro = p.libro ? p.libro.titulo : '-';
+                const devolucion = p.fechaDevolucion || '-';
+                const badge = p.estado === 'prestado' ? 'badge-prestado' : 'badge-devuelto';
+                const actions = p.estado === 'prestado'
+                    ? `<button class="btn btn-success" data-action="devolver" data-id="${escapeHtml(p.id)}">Devolver</button>`
+                    : '<span>Completado</span>';
+                tbody.innerHTML += `<tr>
+                    <td>${escapeHtml(p.id)}</td><td>${escapeHtml(socio)}</td><td>${escapeHtml(libro)}</td>
+                    <td>${escapeHtml(p.fechaPrestamo)}</td><td>${escapeHtml(devolucion)}</td>
+                    <td><span class="badge ${badge}">${escapeHtml(p.estado)}</span></td>
+                    <td>${actions}</td></tr>`;
+            });
+            document.getElementById('table').style.display = 'table';
+        }
+
+        function populateSelects() {
+            document.getElementById('socioId').innerHTML = socios.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.nombre)}</option>`).join('');
+            document.getElementById('libroId').innerHTML = libros.filter(l => l.stock > 0).map(l => `<option value="${escapeHtml(l.id)}">${escapeHtml(l.titulo)} (stock: ${escapeHtml(l.stock)})</option>`).join('');
+        }
+
+        window.filterList = function() {
+            const estado = document.getElementById('filterEstado').value;
+            const filtered = estado ? allPrestamos.filter(p => p.estado === estado) : allPrestamos;
+            renderTable(filtered);
+        };
+
+        window.showForm = function() {
+            document.getElementById('form').reset();
+            document.getElementById('modal').classList.add('active');
+        };
+
+        window.save = async function(e) {
+            e.preventDefault();
+            const body = {
+                socioId: parseInt(document.getElementById('socioId').value),
+                libroId: parseInt(document.getElementById('libroId').value)
+            };
+            try {
+                await post('/api/prestamos', body);
+                closeModal();
+                showMessage('Préstamo creado', 'success');
+                window.renderList();
+            } catch (err) { showMessage(err.message, 'error'); }
+        };
+
+        window.devolver = async function(id) {
+            if (!confirm('¿Confirmar devolución de este préstamo?')) return;
+            try {
+                await put(`/api/prestamos/${id}/devolucion`, {});
+                showMessage('Préstamo devuelto', 'success');
+                window.renderList();
+            } catch (e) { showMessage(e.message, 'error'); }
+        };
+
+        window.closeModal = function() { document.getElementById('modal').classList.remove('active'); };
+        window.showMessage = function(msg, type) {
+            const el = document.getElementById('message');
+            el.innerHTML = `<div class="message ${escapeHtml(type)}">${escapeHtml(msg)}</div>`;
+            setTimeout(() => el.innerHTML = '', 3000);
+        };
+        bindTableActions(document.getElementById('tbody'), {
+            devolver: id => window.devolver(id)
+        });
+        window.renderList();
+    </script>
+</body>
+</html>
